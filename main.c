@@ -1,0 +1,401 @@
+#include <stdio.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include "variables.h"
+#include <stdlib.h>
+#include <time.h>
+
+  /*
+   * @brief sistem saatini ayarlama fonksiyonu 
+   */
+  void clk_init(void);
+
+  /*
+   * @brief UART haberlesme ayarlama fonksiyonu
+   * @param baud_rate veri gonderme hizi (1bps, 10bps, 100bps)
+   * @return true islem basarili ise
+   *         false parametreler hatali ise
+   */
+  bool uart_init(uint8_t baud_rate, uint8_t parity_bit);
+
+  /*
+   * @brief pin ayarlama fonksiyonu
+   * @param pin_num pin numarasi
+   *        pin_mode 0x0 pin giris, 0x01 pin cikis
+   * @return true islem basarili ise
+   *         false parametreler hatali ise
+   */
+  bool pin_init(uint8_t pin_num, uint8_t pin_mode);
+
+  /*
+   * @brief sistem saatinde ayarlanan surenin gecip gecmedigini sorgulama fonksiyonu
+   * @return true sure gecti
+   *         false sure henuz gecmedi
+   */
+  bool clk_ticked(void);
+
+  /*
+   * @brief pin okuma fonksiyonu
+   * @param pin_num pin numarasi
+   * @return -1 pin numarasi yanlis ise
+   *          0 pin low
+   *          1 pin high
+   */
+  int8_t pin_read(uint8_t pin_num);
+  
+  /*
+   * @brief pin yazma fonksiyonu
+   * @param pin_num pin numarasi
+   *        pin_state pin durumu 0 Low 1 High
+   * @return true islem basarili ise
+   *         false parametreler hatali ise
+   */
+  bool pin_write(uint8_t pin_num, uint8_t pin_state);
+  
+  /*
+   * @brief porttaki butun pinleri okuma fonksiyonu 
+   * @note hem giris hem cikis pinlerini okur
+   * @param port_num port numarasi
+   * @return 0x00 - 0xFF pin durumlarina gore her bit bir pini temsil eder
+   */
+  uint8_t port_read(uint8_t port_num);
+  
+  /*
+   * @brief porttaki butun pinleri yazma fonksiyonu
+   * @note sadece cikis pinlerini etkilemeli
+   * @param port_num port numarasi
+   *        port_state 0x00 0xFF pin durumlarina gore her bit bir pini temsil eder
+   * @return true islem basarili ise
+   *         false parametreler hatali ise
+   */
+  bool port_write(uint8_t port_num, uint8_t port_state);
+  
+  /*
+   * @brief UART portundan gelen veriyi okuma fonksiyonu
+   * @param data_buffer verinin yazilacagi tamponun adresi
+   * @return 0x00 - 0xFF okunan verinin boyutu
+   */
+  uint8_t uart_read(void);
+  
+  /*
+   * @brief UART portundan veri gonderme fonksiyonu
+   * @param data_size okunacak verinin boyutu
+   * @return true islem basarili ise
+   *         false parametreler hatali veya gonderme kanalı dolu ise
+   */
+  bool uart_write(uint8_t data_size);
+
+static clock_t start_time;
+
+int main(void) {
+    // Sistem saati ve UART başlatılır
+    clk_init();
+    uart_init(10, 0);
+
+    // Pin ve port ayarları
+    pin_init(0, 1);  // Pin 0, output olarak ayarlanıyor
+    pin_init(1, 0);  // Pin 1, input olarak ayarlanıyor
+
+    // Uygulama komutları arrayleri
+    app_sequence_instructs[0] = (app_instructs_t){CMD_PIN_W, 0, 0, 1};  // Pin 0, HIGH ayarla
+    app_sequence_instructs[1] = (app_instructs_t){CMD_PIN_R, 0, 1, 0};  // Pin 1, oku
+    app_sequence_instructs[2] = (app_instructs_t){CMD_PORT_W, 0, 1, 0};  // Port 1, tüm pinleri HIGH yap
+    app_sequence_instructs[3] = (app_instructs_t){CMD_PORT_R, 0, 1, 0};  // Port 1 durumunu oku
+    app_sequence_instructs[4] = (app_instructs_t){CMD_UART_W, 0, 1, 0};  // UART üzerinden veri gönder
+    app_sequence_instructs[5] = (app_instructs_t){CMD_UART_R, 0, 0, 0};  // UART üzerinden veri al
+    app_sequence_instructs[6] = (app_instructs_t){CMD_PIN_W, 0, 1, 1};  // Pin 2, HIGH yap
+    app_sequence_instructs[7] = (app_instructs_t){CMD_PIN_R, 0, 1, 0};  // Pin 2 durumunu oku
+    app_sequence_instructs[8] = (app_instructs_t){CMD_PORT_W, 1, 1, 0};  // Port 2, düşük nibble'ı HIGH yap
+    app_sequence_instructs[9] = (app_instructs_t){CMD_PORT_R, 1, 0, 0};  // Port 2 durumunu oku
+
+    // Ana döngü
+    while (1) {
+        if (clk_ticked()) {
+            for (int i = 0; i < 10; i++) {
+                app_instructs_t instr = app_sequence_instructs[i];
+                switch (instr.cmd) {
+                    case CMD_PIN_R:
+                        {
+                            instr.ret_val = pin_read(instr.param1);
+                            //printf("[main] Read Pin %d durumu: %d\n", instr.param1, instr.ret_val);
+                            char message[50];
+                            snprintf(message, sizeof(message), "Pin %d durumu: %d", instr.param1, instr.ret_val);
+                            time_t now = time(NULL);
+                            struct tm *t = localtime(&now);
+                            char time_str[100];
+                            strftime(time_str, sizeof(time_str)-1, "%Y-%m-%d %H:%M:%S", t);
+                            printf("[%s] main fonksiyonu\t%s\n", time_str, message);
+
+                            printf("Pin Read Register: 0x%04X ", instr.ret_val);
+                            for (int i = 15; i >= 0; i--) {
+                                printf("%d", (instr.ret_val >> i) & 1);
+                                if (i % 4 == 0) printf(" ");
+                            }
+                            printf("\n");
+
+                        }    
+                        break;
+                    case CMD_PIN_W:
+                        {
+                            pin_write(instr.param1, instr.param2);
+                            //printf("[main] Write Pin %d durumu: %d\n", instr.param1, instr.ret_val);
+                            char message[50];
+                            snprintf(message, sizeof(message), "Pin %d durumu %d olarak ayarlandı", instr.param1, instr.param2);
+                            time_t now = time(NULL);
+                            struct tm *t = localtime(&now);
+                            char time_str[100];
+                            strftime(time_str, sizeof(time_str)-1, "%Y-%m-%d %H:%M:%S", t);
+                            printf("[%s] main fonksiyonu\t%s\n", time_str, message);
+                            
+                            printf("Pin Write Register: 0x%04X ", instr.param2);
+                            for (int i = 15; i >= 0; i--) {
+                                printf("%d", (instr.param2 >> i) & 1);
+                                if (i % 4 == 0) printf(" ");
+                            }
+                            printf("\n");
+                        }    
+                        break;
+                    case CMD_PORT_R:
+                        {   
+                            uint8_t port_state = port_read(instr.param1); 
+                            char message[50];
+                            snprintf(message, sizeof(message), "Port %d durumu: 0x%02X", instr.param1, port_state);
+                            time_t now = time(NULL);
+                            struct tm *t = localtime(&now);
+                            char time_str[100];
+                            strftime(time_str, sizeof(time_str)-1, "%Y-%m-%d %H:%M:%S", t);
+                            printf("[%s] main fonksiyonu\t%s\n", time_str, message);
+
+                            printf("Port Read Register: 0x%04X ", port_state);
+                            for (int i = 15; i >= 0; i--) {
+                                printf("%d", (port_state >> i) & 1);
+                                if (i % 4 == 0) printf(" ");
+                            }
+                            printf("\n");
+                        }
+                        break;
+                    case CMD_PORT_W:
+                        {
+                            port_write(instr.param1, instr.param2);
+                            char message[50];
+                            snprintf(message, sizeof(message), "Port %d durumu 0x%02X olarak ayarlandı", instr.param1, instr.param2);
+                            time_t now = time(NULL);
+                            struct tm *t = localtime(&now);
+                            char time_str[100];
+                            strftime(time_str, sizeof(time_str)-1, "%Y-%m-%d %H:%M:%S", t);
+                            printf("[%s] main fonksiyonu\t%s\n", time_str, message);
+
+                            printf("Port Write Register: 0x%04X ", instr.param2);
+                            for (int i = 15; i >= 0; i--) {
+                                printf("%d", (instr.param2 >> i) & 1);
+                                if (i % 4 == 0) printf(" ");
+                            }
+                            printf("\n");
+                        }
+                        break;
+                    case CMD_UART_R:
+                        {
+                            uint8_t data = uart_read();
+                            char message[50];
+                            snprintf(message, sizeof(message), "UART RX verisi: 0x%02X", data);
+                            time_t now = time(NULL);
+                            struct tm *t = localtime(&now);
+                            char time_str[100];
+                            strftime(time_str, sizeof(time_str)-1, "%Y-%m-%d %H:%M:%S", t);
+                            printf("[%s] main fonksiyonu\t%s\n", time_str, message);
+
+                            printf("UART Read Register: 0x%04X ", data);
+                            for (int i = 15; i >= 0; i--) {
+                                printf("%d", (data >> i) & 1);
+                                if (i % 4 == 0) printf(" ");
+                            }
+                            printf("\n");
+                        }
+                        break;
+                    case CMD_UART_W:
+                        {
+                            uart_write(instr.param1);
+                            char message[50];
+                            snprintf(message, sizeof(message), "UART TX verisi: 0x%02X olarak gönderildi", instr.param1);
+                            time_t now = time(NULL);
+                            struct tm *t = localtime(&now);
+                            char time_str[100];
+                            strftime(time_str, sizeof(time_str)-1, "%Y-%m-%d %H:%M:%S", t);
+                            printf("[%s] main fonksiyonu\t%s\n", time_str, message);
+
+                            printf("UART Write Register: 0x%04X ", instr.param1);
+                            for (int i = 15; i >= 0; i--) {
+                                printf("%d", (instr.param1 >> i) & 1);
+                                if (i % 4 == 0) printf(" ");
+                            }
+                            printf("\n");
+                        }
+                        break;
+                    case CMD_NOP:
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+void clk_init(void) { 
+    // Programın başlangıç zamanını kaydeder
+    start_time = clock();
+    printf("[clk_init] Sistem saati ayarlandı. Başlangıç zamanı: %ld clock ticks\n", (long)start_time);
+}
+
+bool uart_init(uint8_t baud_rate, uint8_t parity_bit) {
+    if ((baud_rate != 1 && baud_rate != 10 && baud_rate != 100) || (parity_bit != 0 && parity_bit != 1)) {
+        printf("[uart_init] Hatalı parametreler\n");
+        return false;
+    }
+    reg_config_uart = (baud_rate << 1) | parity_bit;
+    printf("[uart_init] UART ayarlandı - Baud rate: %d, Parity bit: %s\n", baud_rate, parity_bit ? "EVEN" : "OFF");
+    return true;
+}
+
+bool pin_init(uint8_t pin_num, uint8_t pin_mode) {
+    if (pin_num >= 16 || (pin_mode != 0 && pin_mode != 1)) {
+        printf("[pin_init] Hatalı parametreler pin_num: %d pin_mode: %d \n",pin_num,pin_mode);
+        return false;
+    }
+    if (pin_num < 8) {
+        if (pin_mode == 1) {
+            reg_config_port_1 = reg_config_port_1 | (1 << pin_num);
+        } else {
+            reg_config_port_1 = reg_config_port_1 & ~(1 << pin_num);
+        }
+    } else {
+        pin_num = pin_num - 8;
+        if (pin_mode == 1) {
+            reg_config_port_2 = reg_config_port_2 | (1 << pin_num);
+        } else {
+            reg_config_port_2 = reg_config_port_2 & ~(1 << pin_num);
+        }
+    }
+    printf("[pin_init] Pin %d ayarlandı - Mod: %s\n", pin_num, pin_mode ? "Çıkış" : "Giriş");
+    return true;
+}
+
+bool clk_ticked(void) {
+    static clock_t last_time = 0;
+    clock_t current_time = clock();
+    // Her saate tıklandığında last_time bir önceki current time değeri ile yenilenir.
+    if ((current_time - last_time) * 10 / CLOCKS_PER_SEC >= 1) {
+        last_time = current_time;
+        return true;
+    }
+    return false;
+}
+
+int8_t pin_read(uint8_t pin_num) {
+    if (pin_num >= 16) {
+        printf("[pin_read] Hatalı pin numarası\n");
+        return -1;
+    }
+    if (pin_num < 8) {
+        if (reg_config_port_1 & (1 << pin_num)) {
+            return (reg_state_port_1 & (1 << pin_num)) ? 1 : 0;
+        } else {
+            return rand() % 2;  // Rastgele HIGH veya LOW döndür
+        }
+    } else {
+        pin_num -= 8;
+        if (reg_config_port_2 & (1 << pin_num)) {
+            return (reg_state_port_2 & (1 << pin_num)) ? 1 : 0;
+        } else {
+            return rand() % 2;  // Rastgele HIGH veya LOW döndür
+        }
+    }
+}
+
+bool pin_write(uint8_t pin_num, uint8_t pin_state) {
+    if (pin_num >= 16 || (pin_state != 0 && pin_state != 1)) {
+        printf("[pin_write] Hatalı parametreler\n");
+        return false;
+    }
+    if (pin_num < 8) {
+        if (reg_config_port_1 & (1 << pin_num)) {
+            if (pin_state) {
+                reg_state_port_1 |= (1 << pin_num);
+            } else {
+                reg_state_port_1 &= ~(1 << pin_num);
+            }
+        } else {
+            printf("[pin_write] Pin %d giriş olarak ayarlı\n", pin_num);
+            return false;
+        }
+    } else {
+        pin_num -= 8;
+        if (reg_config_port_2 & (1 << pin_num)) {
+            if (pin_state) {
+                reg_state_port_2 |= (1 << pin_num);
+            } else {
+                reg_state_port_2 &= ~(1 << pin_num);
+            }
+        } else {
+            printf("[pin_write] Pin %d giriş olarak ayarlı\n", pin_num);
+            return false;
+        }
+    }
+    printf("[pin_write] Pin %d durumu %d olarak ayarlandı\n", pin_num, pin_state);
+    return true;
+}
+
+uint8_t port_read(uint8_t port_num) {
+    if (port_num == 1) {
+        return reg_state_port_1;
+    } else if (port_num == 2) {
+        return reg_state_port_2;
+    } else {
+        printf("[port_read] Hatalı port numarası port_num: %d\n",port_num);
+        return 0;
+    }
+}
+
+bool port_write(uint8_t port_num, uint8_t port_state) {
+    if (port_num == 1) {
+        for (int i = 0; i < 8; i++) {
+            if (!(reg_config_port_1 & (1 << i))) {
+                printf("[port_write] Port 1, Pin %d giriş olarak ayarlı\n", i);
+                return false;
+            }
+        }
+        reg_state_port_1 = port_state;
+    } else if (port_num == 2) {
+        for (int i = 0; i < 8; i++) {
+            if (!(reg_config_port_2 & (1 << i))) {
+                printf("[port_write] Port 2, Pin %d giriş olarak ayarlı\n", i);
+                return false;
+            }
+        }
+        reg_state_port_2 = port_state;
+    } else {
+        printf("[port_write] Hatalı port numarası\n");
+        return false;
+    }
+    printf("[port_write] Port %d durumu 0x%02X olarak ayarlandı\n", port_num, port_state);
+    return true;
+}
+
+uint8_t uart_read(void) {
+    uint8_t data = reg_uart_rx & 0xFF;
+    printf("[uart_read] UART RX verisi: 0x%02X\n", data);
+    return data;
+}
+
+bool uart_write(uint8_t data_size) {
+    if (reg_uart_chn != 0) {
+        printf("[uart_write] UART kanalı dolu\n");
+        return false;
+    }
+    reg_uart_tx = data_size;
+    reg_uart_chn = reg_uart_tx;
+    printf("[uart_write] UART TX verisi: 0x%02X\n", data_size);
+    return true;
+}
+
