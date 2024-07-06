@@ -30,7 +30,7 @@ typedef struct
         /* fonksiyon 1. parametresi */
         uint8_t param1;
         /* fonksiyon 2. parametresi */
-        uint8_t param2;
+        uint8_t param2; 
   }app_instructs_t;
 
 // Register ve diğer değişkenlerin extern ile bildirimi
