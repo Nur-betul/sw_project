@@ -39,8 +39,7 @@ extern uint8_t reg_config_port_2;
 extern uint8_t reg_config_uart;
 extern uint8_t reg_state_port_1;
 extern uint8_t reg_state_port_2;
-extern uint16_t reg_uart_rx;
-extern uint16_t reg_uart_tx;
+extern uint8_t reg_uart_rx;
 extern uint16_t reg_uart_chn;
 extern app_instructs_t app_sequence_instructs[10];
 

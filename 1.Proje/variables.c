@@ -13,7 +13,7 @@
   /* 1. Port pin durumalari */
   uint8_t reg_state_port_2;
   /* UART gelen veri registeri */
-  uint16_t reg_uart_rx;
+  uint8_t reg_uart_rx;
   /* UART giden veri registeri */
   uint16_t reg_uart_tx;
   /* UART veri tasiyan kanal registeri */

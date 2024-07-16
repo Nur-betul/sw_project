@@ -4,6 +4,15 @@
 #include "variables.h"
 #include <stdlib.h>
 #include <time.h>
+#include "main.h"
+
+// Mevcut main.c içeriğiniz buraya gelecek
+uint8_t reg_config_port_1 = 33;
+uint8_t reg_config_port_2 = 0;
+uint8_t reg_config_uart = 10;
+static clock_t start_time;
+app_instructs_t instr;
+uint8_t data;
 
   /*
    * @brief sistem saatini ayarlama fonksiyonu 
@@ -69,13 +78,13 @@
    *         false parametreler hatali ise
    */
   bool port_write(uint8_t port_num, uint8_t port_state);
-  
-  /*
+
+   /*
    * @brief UART portundan gelen veriyi okuma fonksiyonu
-   * @param data_buffer verinin yazilacagi tamponun adresi
-   * @return 0x00 - 0xFF okunan verinin boyutu
+   * @return true arabellekteki veri başarılı bir şekilde okunmuş ise
+   *         false arabellekte veri yoksa veya veri doğrulanamadı ise
    */
-  uint8_t uart_read(void);
+  bool uart_read(void);
   
   /*
    * @brief UART portundan veri gonderme fonksiyonu
@@ -85,8 +94,6 @@
    */
   bool uart_write(uint8_t data_size);
 
-static clock_t start_time;
-app_instructs_t instr;
 
 int main(void) {
     // Sistem saati ve UART başlatılır
@@ -331,23 +338,33 @@ bool port_write(uint8_t port_num, uint8_t port_state) {
     return true;
 }
 
-uint8_t uart_read(void ) {
-    uint8_t data;
-    reg_uart_rx = reg_uart_chn;
-    printf("[uart_read] fonksiyonu UART RX verisi: 0x%02X\n", reg_uart_chn);
+bool uart_read(void) {
+    // UART arabellekte veri var mı kontrolü
+    if ((reg_uart_chn & 0xFF) == 0) {
+        // Arabellekte veri yok
+        printf("[uart_read] Arabellekte veri yok.\n");
+        return false;
+    }
+
+    // UART RX verisini oku
+    data = (uint8_t)(reg_uart_chn & 0xFF);
+    reg_uart_rx = data;
+    printf("[uart_read] fonksiyonu UART RX verisi: 0x%02X\n", data);
+
+    // Okunan veriyi sıfırla
     reg_uart_chn = 0;
-    data = reg_uart_rx & 0xFF;
-    return data;
+
+    // Veri başarılı bir şekilde okundu
+    return true;
 }
 
-bool uart_write(uint8_t data_size) {
+bool uart_write(uint8_t data_frame) {
     if (reg_uart_chn != 0) {
         printf("[uart_write] fonksiyonu UART kanalı dolu\n");
         return false;
     }
-    reg_uart_tx = data_size;
-    reg_uart_chn = reg_uart_tx;
-    printf("[uart_write] fonksiyonu UART TX verisi: 0x%02X\n", reg_uart_tx);
+    reg_uart_chn = data_frame;
+    printf("[uart_write] fonksiyonu UART TX verisi: 0x%02X\n", reg_uart_chn);
     return true;
 }
 
