@@ -1,34 +1,36 @@
 CC = gcc
-CFLAGS = -Wall -std=c99 -I. -Iunity
+CFLAGS = -Wall -std=c99 -I. -IUnity
 TARGET = main
 TEST_TARGET = test_mcu
-TEST_OBJ = test/test_mcu.o unity/unity.o
+OBJ = main.o variables.o
+TEST_OBJ = test/test_mcu.o Unity/unity.o variables.o
 
+# all: $(TARGET) $(TEST_TARGET)
 all: $(TARGET)
 
+# $(TARGET): main.o variables.o Unity/unity.o
+# 	$(CC) $(CFLAGS) -o $(TARGET) main.o variables.o Unity/unity.o
+
 $(TARGET): main.o variables.o
-	$(CC) $(CFLAGS) -o $(TARGET) main.o variables.o
+	$(CC) $(CFLAGS) -o $(TARGET) main.o variables.o 
 
-main.o: main.c main.h variables.h
-	$(CC) $(CFLAGS) -c main.c
+# $(TEST_TARGET): $(TEST_OBJ)
+# 	$(CC) $(CFLAGS) -o $(TEST_TARGET) $(TEST_OBJ)
 
-variables.o: variables.c variables.h
-	$(CC) $(CFLAGS) -c variables.c
+# main.o: main.c main.h variables.h
+main.o: main.c variables.h
+	$(CC) $(CFLAGS) -c main.c -o main.o
 
-$(TEST_TARGET): $(TEST_OBJ) main.o variables.o
-	$(CC) $(CFLAGS) -o $(TEST_TARGET) $(TEST_OBJ) main.o variables.o
+variables.o: variables.c variables.h 
+	$(CC) $(CFLAGS) -c variables.c -o variables.o
 
-test/test_mcu.o: test/test_mcu.c variables.h main.h
-	$(CC) $(CFLAGS) -c test/test_mcu.c -o test/test_mcu.o
-
-unity/unity.o: unity/unity.c unity/unity.h
-	$(CC) $(CFLAGS) -c unity/unity.c -o unity/unity.o
-
-clean:
-	rm -f *.o $(TARGET) $(TEST_TARGET) test/*.o unity/*.o
-
-
-
-# test/test_mcu.o: test/test_mcu.c main.h
+# test/test_mcu.o: test/test_mcu.c variables.h main.h
 # 	$(CC) $(CFLAGS) -c test/test_mcu.c -o test/test_mcu.o
 
+# Unity/unity.o: Unity/unity.c Unity/unity.h Unity/unity_internals.h
+# 	$(CC) $(CFLAGS) -c Unity/unity.c -o Unity/unity.o
+
+# clean:
+# 	rm -f *.o main test_mcu test/*.o Unity/*.o
+clean:
+	rm -f *.o $(TARGET)
