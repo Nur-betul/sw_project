@@ -168,6 +168,7 @@ void clk_init(void) {
     // Programın başlangıç zamanını kaydeder
     start_time = clock();
     printf("[clk_init] fonksiyonu Sistem saati ayarlandı. Başlangıç zamanı: %ld clock ticks\n", (long)start_time);
+    
 }
 
 bool uart_init(uint8_t baud_rate, uint8_t parity_bit) {

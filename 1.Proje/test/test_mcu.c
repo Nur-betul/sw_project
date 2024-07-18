@@ -13,14 +13,15 @@
 
 #include "../main.h"
 #include "../Unity/unity.h"
+#include "../variables.h"
 
 /***************************************************************************************************
 * Macro definitions.
 ***************************************************************************************************/
 
 #define PIN_NUM  (2U)
-#define PINS_IN  ((uint8_t[PIN_NUM]){0x08U, 0x0BU})
-#define PINS_OUT ((uint8_t[PIN_NUM]){0x00U, 0x05U})
+// #define PINS_IN  ((uint8_t[PIN_NUM]){0x08U, 0x0BU})
+// #define PINS_OUT ((uint8_t[PIN_NUM]){0x00U, 0x05U})
 
 #define PIN_MODE_IN  (0U)
 #define PIN_MODE_OUT (1U)
@@ -41,9 +42,10 @@
 
 static bool s_retval_pin_init = true;
 static bool s_retval_uart_init = false;
-static bool s_retval_clk_init = false;
 
-static uint8_t pins[2][PIN_NUM] = {PINS_IN, PINS_OUT};
+// static uint8_t pins[2][PIN_NUM] = {PINS_IN, PINS_OUT};
+
+static uint8_t pins[2][PIN_NUM] = {{0x08U, 0x0BU}, {0x00U, 0x05U}};
 
 /***************************************************************************************************
 * Local function definitions.
@@ -61,9 +63,6 @@ void setUp()
 {
     uint8_t i = 0U;
     uint8_t j = 0U;
-
-    /* Initialize the clock with 10Hz frequency */
-    s_retval_clk_init = clk_init(void);
 
     /* Traverse through pin modes */
     for (i = 0; i < 2U; i++)
