@@ -17,7 +17,7 @@
   /* UART veri tasiyan kanal registeri */
   uint16_t reg_uart_chn;
 
-  /* Uygualama komutlar dizisi */
+ 
   app_instructs_t app_sequence_instructs[10] = 
   {
    {
